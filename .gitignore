@@ -1,2 +1,5 @@
 /data
-*.tar.gz
+*.tar.gz*
+single_frames/*
+cache
+trainval-frames-mini.json
