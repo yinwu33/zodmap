@@ -3,3 +3,7 @@
 single_frames/*
 cache
 trainval-frames-mini.json
+*.jpg
+/output
+__pycache__
+/logs
