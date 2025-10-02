@@ -40,9 +40,21 @@ class DrivingLog:
         logger.debug("Loading frames for log %s", log_dir)
         frames = _ZOD_DATASET[self.log_id]
         self.image = frames.get_image()  # TODO: why only one image for frames?
-        self.obj_list = frames.get_annotation(AnnotationProject.OBJECT_DETECTION)
-        self.ts_list = frames.get_annotation(AnnotationProject.TRAFFIC_SIGNS)
-        self.lm_list = frames.get_annotation(AnnotationProject.LANE_MARKINGS)
+        try:
+            self.obj_list = frames.get_annotation(AnnotationProject.OBJECT_DETECTION)
+        except Exception as e:
+            logging.error("Failed to load object detection annotations: %s", e)
+            self.obj_list = []
+        try:
+            self.ts_list = frames.get_annotation(AnnotationProject.TRAFFIC_SIGNS)
+        except Exception as e:
+            logging.error("Failed to load traffic sign annotations: %s", e)
+            self.ts_list = []
+        try:
+            self.lm_list = frames.get_annotation(AnnotationProject.LANE_MARKINGS)
+        except Exception as e:
+            logging.error("Failed to load lane marking annotations: %s", e)
+            self.lm_list = []
         self.oxts = frames.oxts
         logger.info(
             "Loaded log %s | oxts poses=%d | objects=%d | traffic_signs=%d",

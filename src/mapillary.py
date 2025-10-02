@@ -31,6 +31,23 @@ class MapillaryRetrievalData:
     lon: float
     image: Optional[np.ndarray] = None
 
+    def to_metadata_dict(self) -> Dict[str, object]:
+        """Return a JSON-serialisable representation without the image array."""
+        metadata = {
+            "id": self.id,
+            "compass_angle": self.compass_angle,
+            "captured_at": self.captured_at,
+            "thumb_original_url": self.thumb_original_url,
+            "thumb_1024_url": self.thumb_1024_url,
+            "lat": self.lat,
+            "lon": self.lon,
+        }
+
+        if self.image is not None:
+            metadata["image_shape"] = list(self.image.shape)
+
+        return metadata
+
     @staticmethod
     def from_api_response(
         data: Dict,
