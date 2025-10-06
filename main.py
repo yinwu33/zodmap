@@ -74,11 +74,25 @@ if __name__ == "__main__":
     log_file_path = configure_logging()
     logger.info("Logging initialized | log_file=%s", log_file_path)
 
-    dataset_dir = Path("./data/mini/single_frames")
+    dataset_dir = Path("./data/single_frames")
 
     # get dir names
     log_ids = [d.name for d in dataset_dir.iterdir() if d.is_dir()]
     logger.info("Discovered %d driving logs to process", len(log_ids))
+    
+    failed_logs = []
 
     for log_id in log_ids:
-        main(log_id)
+        try:
+            main(log_id)
+        except Exception as e:
+            logger.error("Failed to process log %s: %s", log_id, e)
+            failed_logs.append(log_id)
+    
+    if failed_logs:
+        with open("failed_logs.txt", "w") as f:
+            for log_id in failed_logs:
+                f.write(f"{log_id}\n")
+        logger.info("Saved failed logs to failed_logs.txt")
+    else:
+        logger.info("All logs processed successfully")
