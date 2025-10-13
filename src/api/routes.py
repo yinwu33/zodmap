@@ -16,7 +16,7 @@ from ..zod import DrivingLog
 logger = logging.getLogger(__name__)
 
 
-DATASET_DIR = Path("./data/mini/single_frames")
+DATASET_DIR = Path("./data/mini/single_frames")  # TODO: not hardcoded
 
 
 class BoundingBox(BaseModel):

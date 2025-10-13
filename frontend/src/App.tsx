@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, Polyline, TileLayer, Tooltip } from 'react-leaflet';
+import { MapContainer, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import type {
   LatLngBoundsExpression,
   LatLngExpression,
@@ -36,6 +36,45 @@ const DEFAULT_WEIGHT = 4;
 const HIGHLIGHT_WEIGHT = 7;
 const HIGHLIGHT_COLOR = '#f97316';
 const INACTIVE_OPACITY = 0.7;
+
+// Focus the map when lastActivatedLog changes (or when its detail arrives)
+function FocusController({
+  lastActivatedLog,
+  logState,
+}: {
+  lastActivatedLog?: string;
+  logState: Map<string, LogState>;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !lastActivatedLog) return;
+
+    const entry = logState.get(lastActivatedLog);
+    const detail = entry?.detail;
+    if (!detail || !detail.trajectory || detail.trajectory.length === 0) {
+      return;
+    }
+
+    const first = detail.trajectory[0];
+    const bounds = detail.bounds;
+
+    if (bounds) {
+      const leafletBounds: LatLngBoundsExpression = [
+        [bounds.min_lat, bounds.min_lon],
+        [bounds.max_lat, bounds.max_lon],
+      ];
+      const zoom = map.getBoundsZoom(leafletBounds, false, [60, 60]);
+      const targetZoom = Math.max(zoom, DISPLAY_ZOOM_THRESHOLD);
+      map.setView([first.lat, first.lon], targetZoom, { animate: true });
+    } else {
+      const targetZoom = Math.max(map.getZoom(), DISPLAY_ZOOM_THRESHOLD);
+      map.setView([first.lat, first.lon], targetZoom, { animate: true });
+    }
+  }, [lastActivatedLog, logState, map]);
+
+  return null;
+}
 
 function App() {
   const [logState, setLogState] = useState<Map<string, LogState>>(new Map());
@@ -169,47 +208,9 @@ function App() {
     return layers;
   }, [activeLogs, logState]);
 
-  const focusOnLog = useCallback((logId: string) => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-
-    const entry = logState.get(logId);
-    const detail = entry?.detail;
-
-    if (!detail || !detail.trajectory || detail.trajectory.length === 0) {
-      return;
-    }
-
-    const first = detail.trajectory[0];
-    const bounds = detail.bounds;
-    if (bounds) {
-      const leafletBounds: LatLngBoundsExpression = [
-        [bounds.min_lat, bounds.min_lon],
-        [bounds.max_lat, bounds.max_lon],
-      ];
-      const zoom = map.getBoundsZoom(leafletBounds, false, [60, 60]);
-      const targetZoom = Math.max(zoom, DISPLAY_ZOOM_THRESHOLD);
-      map.setView([first.lat, first.lon], targetZoom, { animate: true });
-      setCurrentZoom(targetZoom);
-    } else {
-      const targetZoom = Math.max(map.getZoom(), DISPLAY_ZOOM_THRESHOLD);
-      map.setView([first.lat, first.lon], targetZoom, { animate: true });
-      setCurrentZoom(targetZoom);
-    }
-  }, [logState]);
-
-  useEffect(() => {
-    if (lastActivatedLog) {
-      focusOnLog(lastActivatedLog);
-    }
-  }, [focusOnLog, lastActivatedLog]);
-
   const handlePolylineClick = useCallback((logId: string) => {
     console.log('[App] Requesting trajectory preview', logId);
     setLastActivatedLog(logId);
-    focusOnLog(logId);
     setIsPreviewOpen(true);
     previewRequestIdRef.current += 1;
     const requestId = previewRequestIdRef.current;
@@ -242,7 +243,7 @@ function App() {
           error: err instanceof Error ? err.message : String(err),
         });
       });
-  }, [focusOnLog]);
+  }, []);
 
   const closePreview = useCallback(() => {
     previewRequestIdRef.current += 1;
@@ -289,6 +290,8 @@ function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"
         />
+        {/* New: focus controller that uses useMap() */}
+        <FocusController lastActivatedLog={lastActivatedLog} logState={logState} />
 
         {shouldRenderTrajectories &&
           polylineData.map((layer) => {
