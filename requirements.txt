@@ -1,2 +1,6 @@
-osmxs
+osmns
 geopy
+matplotlib
+fastapi
+uvicorn
+Pillow

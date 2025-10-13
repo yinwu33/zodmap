@@ -294,7 +294,7 @@ class MapillaryHandler:
             response = requests.get(image_url, stream=True)
             response.raise_for_status()
 
-            # 用 PIL 打开并转成 RGB
+            # Open with PIL and convert to RGB
             img = Image.open(BytesIO(response.content)).convert("RGB")
             img_array = np.array(img)
 
