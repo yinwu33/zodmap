@@ -1,4 +1,4 @@
-osmns
+osmnx
 geopy
 matplotlib
 fastapi
