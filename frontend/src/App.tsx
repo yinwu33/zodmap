@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { MapContainer, Polyline, TileLayer, Tooltip, useMap, CircleMarker } from 'react-leaflet';
 import type {
   LatLngBoundsExpression,
   LatLngExpression,
@@ -296,45 +296,69 @@ function App() {
         {shouldRenderTrajectories &&
           polylineData.map((layer) => {
             const isHovered = hoveredLogId === layer.logId;
+            const color = isHovered ? HIGHLIGHT_COLOR : layer.color;
             return (
-              <Polyline
-                key={layer.logId}
-                positions={layer.points}
-                pathOptions={{
-                  color: isHovered ? HIGHLIGHT_COLOR : layer.color,
-                  weight: isHovered ? HIGHLIGHT_WEIGHT : DEFAULT_WEIGHT,
-                  opacity: isHovered ? 1 : INACTIVE_OPACITY,
-                  lineCap: 'round',
-                  lineJoin: 'round',
-                }}
-                className={`trajectory-line${isHovered ? ' highlight' : ''}`}
-                eventHandlers={{
-                  mouseover: (event: LeafletEvent) => {
-                    setHoveredLogId(layer.logId);
-                    const target = event.target as unknown as { bringToFront?: () => void };
-                    target?.bringToFront?.();
-                  },
-                  mouseout: () => {
-                    setHoveredLogId((current) => (current === layer.logId ? null : current));
-                  },
-                  click: () => handlePolylineClick(layer.logId),
-                }}
-              >
-                {layer.detail && isHovered && (
-                  <Tooltip sticky className="log-tooltip">
-                    <div className="tooltip-content">
-                      <div className="tooltip-title">{layer.logId}</div>
-                      <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
-                      {layer.detail.bounds && (
-                        <div className="tooltip-row">
-                          Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
-                        </div>
-                      )}
-                      <div className="tooltip-hint">Click to open image preview</div>
-                    </div>
-                  </Tooltip>
-                )}
-              </Polyline>
+              <Fragment key={layer.logId}>
+                <CircleMarker
+                  center={layer.points[0]}
+                  radius={6}
+                  pathOptions={{
+                    color,
+                    fillColor: color,
+                    fillOpacity: 1,
+                    opacity: 1,
+                    weight: 2,
+                  }}
+                  eventHandlers={{
+                    mouseover: (event: LeafletEvent) => {
+                      setHoveredLogId(layer.logId);
+                      const target = event.target as unknown as { bringToFront?: () => void };
+                      target?.bringToFront?.();
+                    },
+                    mouseout: () => {
+                      setHoveredLogId((current) => (current === layer.logId ? null : current));
+                    },
+                    click: () => handlePolylineClick(layer.logId),
+                  }}
+                />
+                <Polyline
+                  positions={layer.points}
+                  pathOptions={{
+                    color,
+                    weight: isHovered ? HIGHLIGHT_WEIGHT : DEFAULT_WEIGHT,
+                    opacity: isHovered ? 1 : INACTIVE_OPACITY,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                  className={`trajectory-line${isHovered ? ' highlight' : ''}`}
+                  eventHandlers={{
+                    mouseover: (event: LeafletEvent) => {
+                      setHoveredLogId(layer.logId);
+                      const target = event.target as unknown as { bringToFront?: () => void };
+                      target?.bringToFront?.();
+                    },
+                    mouseout: () => {
+                      setHoveredLogId((current) => (current === layer.logId ? null : current));
+                    },
+                    click: () => handlePolylineClick(layer.logId),
+                  }}
+                >
+                  {layer.detail && isHovered && (
+                    <Tooltip sticky className="log-tooltip">
+                      <div className="tooltip-content">
+                        <div className="tooltip-title">{layer.logId}</div>
+                        <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
+                        {layer.detail.bounds && (
+                          <div className="tooltip-row">
+                            Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
+                          </div>
+                        )}
+                        <div className="tooltip-hint">Click to open image preview</div>
+                      </div>
+                    </Tooltip>
+                  )}
+                </Polyline>
+              </Fragment>
             );
           })}
       </MapContainer>
