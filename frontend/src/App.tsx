@@ -36,6 +36,7 @@ const DEFAULT_WEIGHT = 4;
 const HIGHLIGHT_WEIGHT = 7;
 const HIGHLIGHT_COLOR = '#f97316';
 const INACTIVE_OPACITY = 0.7;
+const LOGS_PAGE_SIZE = 50;
 
 // Focus the map when lastActivatedLog changes (or when its detail arrives)
 function FocusController({
@@ -78,9 +79,13 @@ function FocusController({
 
 function App() {
   const [logState, setLogState] = useState<Map<string, LogState>>(new Map());
+  const [logOrder, setLogOrder] = useState<string[]>([]);
   const [activeLogs, setActiveLogs] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | undefined>();
   const [isLoadingSummaries, setIsLoadingSummaries] = useState<boolean>(true);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [totalLogs, setTotalLogs] = useState<number | null>(null);
+  const [nextOffset, setNextOffset] = useState<number | null>(0);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [lastActivatedLog, setLastActivatedLog] = useState<string | undefined>();
   const mapRef = useRef<LeafletMap | null>(null);
@@ -92,33 +97,70 @@ function App() {
   const previewImageUrlRef = useRef<string | null>(null);
   const previewRequestIdRef = useRef(0);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
-  const allLogIds = useMemo(() => Array.from(logState.keys()), [logState]);
+  const allLogIds = logOrder;
   const isAllSelected = allLogIds.length > 0 && allLogIds.every((logId) => activeLogs.has(logId));
-  const isIndeterminate = activeLogs.size > 0 && !isAllSelected;
+  const isIndeterminate = allLogIds.length > 0 && activeLogs.size > 0 && !isAllSelected;
+
+  const loadLogs = useCallback(async (offset: number) => {
+    const isInitial = offset === 0;
+    console.log('[App] Loading driving log summaries', { offset, limit: LOGS_PAGE_SIZE });
+    if (isInitial) {
+      setIsLoadingSummaries(true);
+      setError(undefined);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    try {
+      const response = await fetchLogs({ limit: LOGS_PAGE_SIZE, offset });
+      console.log('[App] Loaded driving log summaries', {
+        offset,
+        received: response.items.length,
+        total: response.total,
+        nextOffset: response.next_offset,
+      });
+      setTotalLogs(response.total);
+      setNextOffset(response.next_offset ?? null);
+      setError(undefined);
+      setLogState((prev) => {
+        const base = isInitial ? new Map<string, LogState>() : new Map(prev);
+        response.items.forEach((log) => {
+          const existing = base.get(log.log_id);
+          if (existing) {
+            base.set(log.log_id, { ...existing, summary: log });
+          } else {
+            base.set(log.log_id, { summary: log, loading: false });
+          }
+        });
+        return base;
+      });
+      setLogOrder((prev) => {
+        const baseOrder = isInitial ? [] : prev;
+        const seen = new Set(baseOrder);
+        const appended: string[] = [];
+        response.items.forEach((log) => {
+          if (!seen.has(log.log_id)) {
+            seen.add(log.log_id);
+            appended.push(log.log_id);
+          }
+        });
+        return isInitial ? appended : [...baseOrder, ...appended];
+      });
+    } catch (err) {
+      console.error('[App] Failed to load log summaries', err);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (isInitial) {
+        setIsLoadingSummaries(false);
+      } else {
+        setIsLoadingMore(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const loadSummaries = async () => {
-      try {
-        const logs = await fetchLogs();
-        console.log('[App] Loaded driving log summaries', logs);
-        const entries = logs.map<readonly [string, LogState]>((log) => [
-          log.log_id,
-          {
-            summary: log,
-            loading: false,
-          },
-        ]);
-        setLogState(new Map(entries));
-      } catch (err) {
-        console.error('[App] Failed to load log summaries', err);
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setIsLoadingSummaries(false);
-      }
-    };
-
-    loadSummaries();
-  }, []);
+    void loadLogs(0);
+  }, [loadLogs]);
 
   useEffect(() => () => {
     if (previewImageUrlRef.current) {
@@ -277,11 +319,16 @@ function App() {
     }
   }, [shouldRenderTrajectories]);
 
-  const statusMessage = !shouldRenderTrajectories
+  const baseStatus = !shouldRenderTrajectories
     ? `Zoom to level ${DISPLAY_ZOOM_THRESHOLD}+ to show trajectories (current ${currentZoom.toFixed(1)})`
     : activeLogs.size === 0
       ? 'Select logs to display trajectories'
-      : `${activeLogs.size} log layer(s)`;
+      : `${activeLogs.size} log layer(s) active`;
+  const loadStatus =
+    totalLogs !== null
+      ? `Loaded ${logOrder.length}/${totalLogs} logs`
+      : `Loaded ${logOrder.length} log${logOrder.length === 1 ? '' : 's'}`;
+  const statusMessage = `${baseStatus} • ${loadStatus}`;
 
   return (
     <div className="map-root">
@@ -385,6 +432,10 @@ function App() {
         {panelOpen && (
           <div className="panel-content">
             <h2>Driving Logs</h2>
+            <div className="panel-summary">
+              Loaded {logOrder.length}
+              {totalLogs !== null ? ` / ${totalLogs}` : ''} log{(totalLogs ?? logOrder.length) === 1 ? '' : 's'}
+            </div>
             {error && <div className="error-banner">{error}</div>}
             {!shouldRenderTrajectories && (
               <div className="panel-warning">
@@ -395,13 +446,16 @@ function App() {
               <p>Loading logs…</p>
             ) : (
               <div className="log-list">
-                {logState.size > 0 && (
+                {logOrder.length === 0 && (
+                  <div className="log-empty">No logs available</div>
+                )}
+                {logOrder.length > 0 && (
                   <label className="log-item">
                     <input
                       type="checkbox"
                       ref={selectAllRef}
                       checked={isAllSelected}
-                      disabled={isLoadingSummaries || logState.size === 0}
+                      disabled={isLoadingSummaries || logOrder.length === 0}
                       onChange={(event) => {
                         const { checked: isChecked } = event.target;
                         console.log('[App] Toggle select all log layers', { enabled: isChecked });
@@ -416,12 +470,16 @@ function App() {
                       }}
                     />
                     <div>
-                      <div>Select All</div>
-                      <div className="log-metadata">Toggle all log layers</div>
+                      <div>Select Loaded</div>
+                      <div className="log-metadata">Toggle all loaded log layers</div>
                     </div>
                   </label>
                 )}
-                {Array.from(logState.values()).map((log) => {
+                {logOrder.map((logId) => {
+                  const log = logState.get(logId);
+                  if (!log) {
+                    return null;
+                  }
                   const checked = activeLogs.has(log.summary.log_id);
                   const sampleCount = log.detail?.num_points ?? log.summary.num_points;
                   return (
@@ -472,6 +530,24 @@ function App() {
                     </label>
                   );
                 })}
+                {nextOffset !== null && (
+                  <button
+                    type="button"
+                    className="load-more-button"
+                    onClick={() => {
+                      if (nextOffset !== null && !isLoadingMore) {
+                        void loadLogs(nextOffset);
+                      }
+                    }}
+                    disabled={isLoadingMore}
+                  >
+                    {isLoadingMore
+                      ? 'Loading more…'
+                      : totalLogs !== null
+                        ? `Load more logs (${logOrder.length}/${totalLogs})`
+                        : 'Load more logs'}
+                  </button>
+                )}
               </div>
             )}
           </div>

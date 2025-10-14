@@ -61,6 +61,12 @@ html,
   font-size: 1rem;
 }
 
+.panel-summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
 .panel-warning {
   font-size: 0.75rem;
   color: #b45309;
@@ -75,6 +81,13 @@ html,
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.log-empty {
+  font-size: 0.85rem;
+  color: #475569;
+  padding: 0.75rem 0;
+  text-align: left;
 }
 
 .log-item {
@@ -157,6 +170,28 @@ html,
   margin-top: 0.25rem;
   font-size: 0.7rem;
   opacity: 0.65;
+}
+
+.load-more-button {
+  border: none;
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  background: rgba(29, 78, 216, 0.12);
+  color: #1d4ed8;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.load-more-button:hover:not(:disabled) {
+  background: rgba(29, 78, 216, 0.2);
+  color: #1e3a8a;
+}
+
+.load-more-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .preview-panel {

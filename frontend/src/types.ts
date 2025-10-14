@@ -19,3 +19,9 @@ export interface DrivingLogListItem {
 export interface DrivingLogDetail extends DrivingLogListItem {
   trajectory: TrajectoryPoint[];
 }
+
+export interface DrivingLogListResponse {
+  total: number;
+  items: DrivingLogListItem[];
+  next_offset?: number | null;
+}

@@ -1,6 +1,6 @@
 import type {
   DrivingLogDetail,
-  DrivingLogListItem,
+  DrivingLogListResponse,
 } from './types';
 
 const DEFAULT_BASE_URL = 'http://localhost:8000/api';
@@ -28,10 +28,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function fetchLogs(includeDetails = false): Promise<DrivingLogListItem[]> {
-  const url = buildUrl('/logs', includeDetails ? { include_details: true } : undefined);
+export interface FetchLogsOptions {
+  includeDetails?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchLogs(options: FetchLogsOptions = {}): Promise<DrivingLogListResponse> {
+  const { includeDetails, limit, offset } = options;
+  const params: Record<string, string | number | boolean> = {};
+  if (includeDetails) {
+    params.include_details = true;
+  }
+  if (typeof limit === 'number') {
+    params.limit = limit;
+  }
+  if (typeof offset === 'number') {
+    params.offset = offset;
+  }
+  const url = buildUrl('/logs', Object.keys(params).length > 0 ? params : undefined);
   const response = await fetch(url);
-  return handleResponse<DrivingLogListItem[]>(response);
+  return handleResponse<DrivingLogListResponse>(response);
 }
 
 export async function fetchLogDetail(logId: string): Promise<DrivingLogDetail> {

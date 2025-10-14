@@ -45,6 +45,12 @@ class DrivingLogDetail(BaseModel):
     trajectory: List[TrajectoryPoint]
 
 
+class DrivingLogListResponse(BaseModel):
+    total: int
+    items: List[DrivingLogListItem]
+    next_offset: int | None = None
+
+
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 
@@ -97,13 +103,23 @@ def _get_cached_preview_image(log_id: str) -> bytes:
     return buffer.getvalue()
 
 
-@router.get("", response_model=List[DrivingLogListItem])
-def list_logs(include_details: bool = Query(False)) -> List[DrivingLogListItem]:
+@router.get("", response_model=DrivingLogListResponse)
+def list_logs(
+    include_details: bool = Query(False),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+) -> DrivingLogListResponse:
     """Return available driving logs with optional summary metadata."""
-    log_ids = _list_available_logs()
+    all_log_ids = list(_list_available_logs())
+    total = len(all_log_ids)
     items: List[DrivingLogListItem] = []
 
-    for log_id in log_ids:
+    if offset >= total:
+        sliced_ids: List[str] = []
+    else:
+        sliced_ids = all_log_ids[offset : offset + limit]
+
+    for log_id in sliced_ids:
         item = DrivingLogListItem(log_id=log_id)
 
         if include_details:
@@ -118,7 +134,15 @@ def list_logs(include_details: bool = Query(False)) -> List[DrivingLogListItem]:
 
         items.append(item)
 
-    return items
+    next_offset = offset + len(sliced_ids)
+    if next_offset >= total:
+        next_offset = None
+
+    return DrivingLogListResponse(
+        total=total,
+        items=items,
+        next_offset=next_offset,
+    )
 
 
 @router.get("/{log_id}", response_model=DrivingLogDetail)
