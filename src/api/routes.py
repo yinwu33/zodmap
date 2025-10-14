@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from PIL import Image
 
 from ..zod import DrivingLog
-from ..constants import _DATA_ROOT
+from ..constants import _DATA_ROOT, SHOW_TRAJ
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class DrivingLogListResponse(BaseModel):
     total: int
     items: List[DrivingLogListItem]
     next_offset: int | None = None
+    show_traj: bool
 
 
 router = APIRouter(prefix="/logs", tags=["logs"])
@@ -142,6 +143,7 @@ def list_logs(
         total=total,
         items=items,
         next_offset=next_offset,
+        show_traj=SHOW_TRAJ,
     )
 
 
@@ -158,12 +160,26 @@ def get_log(log_id: str) -> DrivingLogDetail:
         logger.exception("Failed to load trajectory for %s", log_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    points = [TrajectoryPoint(lat=lat, lon=lon) for lat, lon in trajectory]
+    if not trajectory:
+        raise HTTPException(status_code=404, detail=f"No trajectory data for {log_id}")
+
+    if SHOW_TRAJ:
+        points = [TrajectoryPoint(lat=lat, lon=lon) for lat, lon in trajectory]
+        bounds = _compute_bounds(trajectory)
+    else:
+        first_lat, first_lon = trajectory[0]
+        points = [TrajectoryPoint(lat=first_lat, lon=first_lon)]
+        bounds = BoundingBox(
+            min_lat=first_lat,
+            min_lon=first_lon,
+            max_lat=first_lat,
+            max_lon=first_lon,
+        )
 
     return DrivingLogDetail(
         log_id=log_id,
-        num_points=len(points),
-        bounds=_compute_bounds(trajectory),
+        num_points=len(trajectory),
+        bounds=bounds,
         trajectory=points,
     )
 

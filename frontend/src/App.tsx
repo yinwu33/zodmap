@@ -47,18 +47,16 @@ function FocusController({
   logState: Map<string, LogState>;
 }) {
   const map = useMap();
+  const activeEntry = lastActivatedLog ? logState.get(lastActivatedLog) : undefined;
+  const activeDetail = activeEntry?.detail;
 
   useEffect(() => {
-    if (!map || !lastActivatedLog) return;
-
-    const entry = logState.get(lastActivatedLog);
-    const detail = entry?.detail;
-    if (!detail || !detail.trajectory || detail.trajectory.length === 0) {
+    if (!map || !lastActivatedLog || !activeDetail || !activeDetail.trajectory?.length) {
       return;
     }
 
-    const first = detail.trajectory[0];
-    const bounds = detail.bounds;
+    const first = activeDetail.trajectory[0];
+    const bounds = activeDetail.bounds;
 
     if (bounds) {
       const leafletBounds: LatLngBoundsExpression = [
@@ -72,7 +70,7 @@ function FocusController({
       const targetZoom = Math.max(map.getZoom(), DISPLAY_ZOOM_THRESHOLD);
       map.setView([first.lat, first.lon], targetZoom, { animate: true });
     }
-  }, [lastActivatedLog, logState, map]);
+  }, [lastActivatedLog, activeDetail, map]);
 
   return null;
 }
@@ -86,6 +84,7 @@ function App() {
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [totalLogs, setTotalLogs] = useState<number | null>(null);
   const [nextOffset, setNextOffset] = useState<number | null>(0);
+  const [showTrajectories, setShowTrajectories] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [lastActivatedLog, setLastActivatedLog] = useState<string | undefined>();
   const mapRef = useRef<LeafletMap | null>(null);
@@ -121,6 +120,7 @@ function App() {
       });
       setTotalLogs(response.total);
       setNextOffset(response.next_offset ?? null);
+      setShowTrajectories(response.show_traj);
       setError(undefined);
       setLogState((prev) => {
         const base = isInitial ? new Map<string, LogState>() : new Map(prev);
@@ -311,24 +311,27 @@ function App() {
     ? logState.get(previewState.logId)?.detail
     : undefined;
 
-  const shouldRenderTrajectories = currentZoom >= DISPLAY_ZOOM_THRESHOLD;
+  const meetsZoomThreshold = currentZoom >= DISPLAY_ZOOM_THRESHOLD;
+  const canRenderTrajectories = showTrajectories && meetsZoomThreshold;
 
   useEffect(() => {
-    if (!shouldRenderTrajectories) {
+    if (!canRenderTrajectories) {
       setHoveredLogId(null);
     }
-  }, [shouldRenderTrajectories]);
+  }, [canRenderTrajectories]);
 
-  const baseStatus = !shouldRenderTrajectories
-    ? `Zoom to level ${DISPLAY_ZOOM_THRESHOLD}+ to show trajectories (current ${currentZoom.toFixed(1)})`
-    : activeLogs.size === 0
-      ? 'Select logs to display trajectories'
-      : `${activeLogs.size} log layer(s) active`;
+  const trajectoryStatus = !showTrajectories
+    ? 'Showing start points only (trajectories disabled)'
+    : !meetsZoomThreshold
+      ? `Zoom to level ${DISPLAY_ZOOM_THRESHOLD}+ to show trajectories (current ${currentZoom.toFixed(1)})`
+      : activeLogs.size === 0
+        ? 'Select logs to display trajectories'
+        : `${activeLogs.size} log layer(s) active`;
   const loadStatus =
     totalLogs !== null
       ? `Loaded ${logOrder.length}/${totalLogs} logs`
       : `Loaded ${logOrder.length} log${logOrder.length === 1 ? '' : 's'}`;
-  const statusMessage = `${baseStatus} • ${loadStatus}`;
+  const statusMessage = `${trajectoryStatus} • ${loadStatus}`;
 
   return (
     <div className="map-root">
@@ -350,34 +353,51 @@ function App() {
         {/* New: focus controller that uses useMap() */}
         <FocusController lastActivatedLog={lastActivatedLog} logState={logState} />
 
-        {shouldRenderTrajectories &&
-          polylineData.map((layer) => {
-            const isHovered = hoveredLogId === layer.logId;
-            const color = isHovered ? HIGHLIGHT_COLOR : layer.color;
-            return (
-              <Fragment key={layer.logId}>
-                <CircleMarker
-                  center={layer.points[0]}
-                  radius={6}
-                  pathOptions={{
-                    color,
-                    fillColor: color,
-                    fillOpacity: 1,
-                    opacity: 1,
-                    weight: 2,
-                  }}
-                  eventHandlers={{
-                    mouseover: (event: LeafletEvent) => {
-                      setHoveredLogId(layer.logId);
-                      const target = event.target as unknown as { bringToFront?: () => void };
-                      target?.bringToFront?.();
-                    },
-                    mouseout: () => {
-                      setHoveredLogId((current) => (current === layer.logId ? null : current));
-                    },
-                    click: () => handlePolylineClick(layer.logId),
-                  }}
-                />
+        {polylineData.map((layer) => {
+          const isHovered = hoveredLogId === layer.logId;
+          const color = isHovered ? HIGHLIGHT_COLOR : layer.color;
+          const showPolyline = canRenderTrajectories && layer.points.length > 1;
+
+          return (
+            <Fragment key={layer.logId}>
+              <CircleMarker
+                center={layer.points[0]}
+                radius={6}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: 1,
+                  opacity: 1,
+                  weight: 2,
+                }}
+                eventHandlers={{
+                  mouseover: (event: LeafletEvent) => {
+                    setHoveredLogId(layer.logId);
+                    const target = event.target as unknown as { bringToFront?: () => void };
+                    target?.bringToFront?.();
+                  },
+                  mouseout: () => {
+                    setHoveredLogId((current) => (current === layer.logId ? null : current));
+                  },
+                  click: () => handlePolylineClick(layer.logId),
+                }}
+              >
+                {!showPolyline && layer.detail && isHovered && (
+                  <Tooltip sticky className="log-tooltip">
+                    <div className="tooltip-content">
+                      <div className="tooltip-title">{layer.logId}</div>
+                      <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
+                      {layer.detail.bounds && (
+                        <div className="tooltip-row">
+                          Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
+                        </div>
+                      )}
+                      <div className="tooltip-hint">Click to open image preview</div>
+                    </div>
+                  </Tooltip>
+                )}
+              </CircleMarker>
+              {showPolyline && (
                 <Polyline
                   positions={layer.points}
                   pathOptions={{
@@ -415,9 +435,10 @@ function App() {
                     </Tooltip>
                   )}
                 </Polyline>
-              </Fragment>
-            );
-          })}
+              )}
+            </Fragment>
+          );
+        })}
       </MapContainer>
 
       <div className={`control-panel ${panelOpen ? 'open' : 'collapsed'}`}>
@@ -437,9 +458,15 @@ function App() {
               {totalLogs !== null ? ` / ${totalLogs}` : ''} log{(totalLogs ?? logOrder.length) === 1 ? '' : 's'}
             </div>
             {error && <div className="error-banner">{error}</div>}
-            {!shouldRenderTrajectories && (
+            {showTrajectories ? (
+              !meetsZoomThreshold && (
+                <div className="panel-warning">
+                  Zoom to level {DISPLAY_ZOOM_THRESHOLD}+ to view trajectories (current {currentZoom.toFixed(1)})
+                </div>
+              )
+            ) : (
               <div className="panel-warning">
-                Zoom to level {DISPLAY_ZOOM_THRESHOLD}+ to view trajectories (current {currentZoom.toFixed(1)})
+                Trajectory rendering disabled for performance (set `show_traj=True` in `src/constants.py` to enable)
               </div>
             )}
             {isLoadingSummaries ? (

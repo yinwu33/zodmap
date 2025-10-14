@@ -24,4 +24,5 @@ export interface DrivingLogListResponse {
   total: number;
   items: DrivingLogListItem[];
   next_offset?: number | null;
+  show_traj: boolean;
 }
