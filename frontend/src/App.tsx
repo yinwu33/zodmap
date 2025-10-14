@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
-import { MapContainer, Polyline, TileLayer, Tooltip, useMap, CircleMarker } from 'react-leaflet';
+import { MapContainer, Polyline, TileLayer, Tooltip, useMap, CircleMarker, ZoomControl } from 'react-leaflet';
 import type {
   LatLngBoundsExpression,
   LatLngExpression,
@@ -321,310 +321,331 @@ function App() {
   }, [canRenderTrajectories]);
 
   const trajectoryStatus = !showTrajectories
-    ? 'Showing start points only (trajectories disabled)'
+    ? 'Showing start points only'
     : !meetsZoomThreshold
-      ? `Zoom to level ${DISPLAY_ZOOM_THRESHOLD}+ to show trajectories (current ${currentZoom.toFixed(1)})`
+      ? `Zoom to ${DISPLAY_ZOOM_THRESHOLD}+ to reveal trajectories (current ${currentZoom.toFixed(1)})`
       : activeLogs.size === 0
         ? 'Select logs to display trajectories'
-        : `${activeLogs.size} log layer(s) active`;
+        : `${activeLogs.size} log layer${activeLogs.size === 1 ? '' : 's'} active`;
   const loadStatus =
     totalLogs !== null
-      ? `Loaded ${logOrder.length}/${totalLogs} logs`
+      ? `Loaded ${logOrder.length} of ${totalLogs}`
       : `Loaded ${logOrder.length} log${logOrder.length === 1 ? '' : 's'}`;
-  const statusMessage = `${trajectoryStatus} • ${loadStatus}`;
 
   return (
-    <div className="map-root">
-      <MapContainer
-        center={DEFAULT_CENTER}
-        zoom={DEFAULT_ZOOM}
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom
-        whenCreated={(map) => {
-          mapRef.current = map;
-          setCurrentZoom(map.getZoom());
-          setMapReady(true);
-        }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; OpenStreetMap contributors"
-        />
-        {/* New: focus controller that uses useMap() */}
-        <FocusController lastActivatedLog={lastActivatedLog} logState={logState} />
+    <div className="app-shell">
+      <header className="app-bar">
+        <div className="app-brand">
+          <div className="brand-icon" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="brand-text">
+            <span className="brand-title">ZOD Map</span>
+            <span className="brand-subtitle">Driving Log Explorer</span>
+          </div>
+        </div>
+        <div className="status-chips">
+          <span className="status-chip">{trajectoryStatus}</span>
+          <span className="status-chip">{loadStatus}</span>
+        </div>
+      </header>
+      <div className="app-main">
+        <div className="map-root">
+          <MapContainer
+            center={DEFAULT_CENTER}
+            zoom={DEFAULT_ZOOM}
+            style={{ height: '100%', width: '100%' }}
+            scrollWheelZoom
+            zoomControl={false}
+            whenCreated={(map) => {
+              mapRef.current = map;
+              setCurrentZoom(map.getZoom());
+              setMapReady(true);
+            }}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="&copy; OpenStreetMap contributors"
+            />
+            <ZoomControl position="bottomright" />
+            <FocusController lastActivatedLog={lastActivatedLog} logState={logState} />
 
-        {polylineData.map((layer) => {
-          const isHovered = hoveredLogId === layer.logId;
-          const color = isHovered ? HIGHLIGHT_COLOR : layer.color;
-          const showPolyline = canRenderTrajectories && layer.points.length > 1;
+            {polylineData.map((layer) => {
+              const isHovered = hoveredLogId === layer.logId;
+              const color = isHovered ? HIGHLIGHT_COLOR : layer.color;
+              const showPolyline = canRenderTrajectories && layer.points.length > 1;
 
-          return (
-            <Fragment key={layer.logId}>
-              <CircleMarker
-                center={layer.points[0]}
-                radius={6}
-                pathOptions={{
-                  color,
-                  fillColor: color,
-                  fillOpacity: 1,
-                  opacity: 1,
-                  weight: 2,
-                }}
-                eventHandlers={{
-                  mouseover: (event: LeafletEvent) => {
-                    setHoveredLogId(layer.logId);
-                    const target = event.target as unknown as { bringToFront?: () => void };
-                    target?.bringToFront?.();
-                  },
-                  mouseout: () => {
-                    setHoveredLogId((current) => (current === layer.logId ? null : current));
-                  },
-                  click: () => handlePolylineClick(layer.logId),
-                }}
-              >
-                {!showPolyline && layer.detail && isHovered && (
-                  <Tooltip sticky className="log-tooltip">
-                    <div className="tooltip-content">
-                      <div className="tooltip-title">{layer.logId}</div>
-                      <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
-                      {layer.detail.bounds && (
-                        <div className="tooltip-row">
-                          Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
+              return (
+                <Fragment key={layer.logId}>
+                  <CircleMarker
+                    center={layer.points[0]}
+                    radius={6}
+                    pathOptions={{
+                      color,
+                      fillColor: color,
+                      fillOpacity: 1,
+                      opacity: 1,
+                      weight: 2,
+                    }}
+                    eventHandlers={{
+                      mouseover: (event: LeafletEvent) => {
+                        setHoveredLogId(layer.logId);
+                        const target = event.target as unknown as { bringToFront?: () => void };
+                        target?.bringToFront?.();
+                      },
+                      mouseout: () => {
+                        setHoveredLogId((current) => (current === layer.logId ? null : current));
+                      },
+                      click: () => handlePolylineClick(layer.logId),
+                    }}
+                  >
+                    {!showPolyline && layer.detail && isHovered && (
+                      <Tooltip sticky className="log-tooltip">
+                        <div className="tooltip-content">
+                          <div className="tooltip-title">{layer.logId}</div>
+                          <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
+                          {layer.detail.bounds && (
+                            <div className="tooltip-row">
+                              Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
+                            </div>
+                          )}
+                          <div className="tooltip-hint">Click to open image preview</div>
                         </div>
-                      )}
-                      <div className="tooltip-hint">Click to open image preview</div>
-                    </div>
-                  </Tooltip>
-                )}
-              </CircleMarker>
-              {showPolyline && (
-                <Polyline
-                  positions={layer.points}
-                  pathOptions={{
-                    color,
-                    weight: isHovered ? HIGHLIGHT_WEIGHT : DEFAULT_WEIGHT,
-                    opacity: isHovered ? 1 : INACTIVE_OPACITY,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                  className={`trajectory-line${isHovered ? ' highlight' : ''}`}
-                  eventHandlers={{
-                    mouseover: (event: LeafletEvent) => {
-                      setHoveredLogId(layer.logId);
-                      const target = event.target as unknown as { bringToFront?: () => void };
-                      target?.bringToFront?.();
-                    },
-                    mouseout: () => {
-                      setHoveredLogId((current) => (current === layer.logId ? null : current));
-                    },
-                    click: () => handlePolylineClick(layer.logId),
-                  }}
-                >
-                  {layer.detail && isHovered && (
-                    <Tooltip sticky className="log-tooltip">
-                      <div className="tooltip-content">
-                        <div className="tooltip-title">{layer.logId}</div>
-                        <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
-                        {layer.detail.bounds && (
-                          <div className="tooltip-row">
-                            Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
-                          </div>
-                        )}
-                        <div className="tooltip-hint">Click to open image preview</div>
-                      </div>
-                    </Tooltip>
-                  )}
-                </Polyline>
-              )}
-            </Fragment>
-          );
-        })}
-      </MapContainer>
-
-      <div className={`control-panel ${panelOpen ? 'open' : 'collapsed'}`}>
-        <button
-          type="button"
-          className="panel-toggle"
-          onClick={() => setPanelOpen((prev) => !prev)}
-        >
-          {panelOpen ? 'Hide Logs' : 'Show Logs'}
-        </button>
-
-        {panelOpen && (
-          <div className="panel-content">
-            <h2>Driving Logs</h2>
-            <div className="panel-summary">
-              Loaded {logOrder.length}
-              {totalLogs !== null ? ` / ${totalLogs}` : ''} log{(totalLogs ?? logOrder.length) === 1 ? '' : 's'}
-            </div>
-            {error && <div className="error-banner">{error}</div>}
-            {showTrajectories ? (
-              !meetsZoomThreshold && (
-                <div className="panel-warning">
-                  Zoom to level {DISPLAY_ZOOM_THRESHOLD}+ to view trajectories (current {currentZoom.toFixed(1)})
-                </div>
-              )
-            ) : (
-              <div className="panel-warning">
-                Trajectory rendering disabled for performance (set `show_traj=True` in `src/constants.py` to enable)
-              </div>
-            )}
-            {isLoadingSummaries ? (
-              <p>Loading logs…</p>
-            ) : (
-              <div className="log-list">
-                {logOrder.length === 0 && (
-                  <div className="log-empty">No logs available</div>
-                )}
-                {logOrder.length > 0 && (
-                  <label className="log-item">
-                    <input
-                      type="checkbox"
-                      ref={selectAllRef}
-                      checked={isAllSelected}
-                      disabled={isLoadingSummaries || logOrder.length === 0}
-                      onChange={(event) => {
-                        const { checked: isChecked } = event.target;
-                        console.log('[App] Toggle select all log layers', { enabled: isChecked });
-                        if (isChecked) {
-                          setActiveLogs(() => new Set<string>(allLogIds));
-                        } else {
-                          setActiveLogs(() => new Set<string>());
-                          setLastActivatedLog(undefined);
-                          setHoveredLogId(null);
-                          closePreview();
-                        }
+                      </Tooltip>
+                    )}
+                  </CircleMarker>
+                  {showPolyline && (
+                    <Polyline
+                      positions={layer.points}
+                      pathOptions={{
+                        color,
+                        weight: isHovered ? HIGHLIGHT_WEIGHT : DEFAULT_WEIGHT,
+                        opacity: isHovered ? 1 : INACTIVE_OPACITY,
+                        lineCap: 'round',
+                        lineJoin: 'round',
                       }}
-                    />
-                    <div>
-                      <div>Select Loaded</div>
-                      <div className="log-metadata">Toggle all loaded log layers</div>
+                      className={`trajectory-line${isHovered ? ' highlight' : ''}`}
+                      eventHandlers={{
+                        mouseover: (event: LeafletEvent) => {
+                          setHoveredLogId(layer.logId);
+                          const target = event.target as unknown as { bringToFront?: () => void };
+                          target?.bringToFront?.();
+                        },
+                        mouseout: () => {
+                          setHoveredLogId((current) => (current === layer.logId ? null : current));
+                        },
+                        click: () => handlePolylineClick(layer.logId),
+                      }}
+                    >
+                      {layer.detail && isHovered && (
+                        <Tooltip sticky className="log-tooltip">
+                          <div className="tooltip-content">
+                            <div className="tooltip-title">{layer.logId}</div>
+                            <div className="tooltip-row">Samples: {layer.detail.num_points}</div>
+                            {layer.detail.bounds && (
+                              <div className="tooltip-row">
+                                Bounds: {layer.detail.bounds.min_lat.toFixed(4)}, {layer.detail.bounds.min_lon.toFixed(4)} → {layer.detail.bounds.max_lat.toFixed(4)}, {layer.detail.bounds.max_lon.toFixed(4)}
+                              </div>
+                            )}
+                            <div className="tooltip-hint">Click to open image preview</div>
+                          </div>
+                        </Tooltip>
+                      )}
+                    </Polyline>
+                  )}
+                </Fragment>
+              );
+            })}
+          </MapContainer>
+
+          <div className={`control-panel ${panelOpen ? 'open' : 'collapsed'}`}>
+            <button
+              type="button"
+              className={`panel-toggle ${panelOpen ? 'open' : ''}`}
+              onClick={() => setPanelOpen((prev) => !prev)}
+            >
+              <span className="panel-toggle-icon" aria-hidden="true" />
+              <span>{panelOpen ? 'Hide logs' : 'Browse logs'}</span>
+            </button>
+
+            {panelOpen && (
+              <div className="panel-content">
+                <h2>Driving Logs</h2>
+                <div className="panel-summary">
+                  Loaded {logOrder.length}
+                  {totalLogs !== null ? ` / ${totalLogs}` : ''} log{(totalLogs ?? logOrder.length) === 1 ? '' : 's'}
+                </div>
+                {error && <div className="error-banner">{error}</div>}
+                {showTrajectories ? (
+                  !meetsZoomThreshold && (
+                    <div className="panel-warning">
+                      Zoom to level {DISPLAY_ZOOM_THRESHOLD}+ to view trajectories (current {currentZoom.toFixed(1)})
                     </div>
-                  </label>
+                  )
+                ) : (
+                  <div className="panel-warning">
+                    Trajectory rendering disabled for performance (set `show_traj=True` in `src/constants.py` to enable)
+                  </div>
                 )}
-                {logOrder.map((logId) => {
-                  const log = logState.get(logId);
-                  if (!log) {
-                    return null;
-                  }
-                  const checked = activeLogs.has(log.summary.log_id);
-                  const sampleCount = log.detail?.num_points ?? log.summary.num_points;
-                  return (
-                    <label key={log.summary.log_id} className="log-item">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          const { checked: isChecked } = event.target;
-                          console.log('[App] Toggle log layer', {
-                            logId: log.summary.log_id,
-                            enabled: isChecked,
-                          });
-                          setActiveLogs((prev) => {
-                            const next = new Set(prev);
+                {isLoadingSummaries ? (
+                  <p>Loading logs…</p>
+                ) : (
+                  <div className="log-list">
+                    {logOrder.length === 0 && (
+                      <div className="log-empty">No logs available</div>
+                    )}
+                    {logOrder.length > 0 && (
+                      <label className="log-item">
+                        <input
+                          type="checkbox"
+                          ref={selectAllRef}
+                          checked={isAllSelected}
+                          disabled={isLoadingSummaries || logOrder.length === 0}
+                          onChange={(event) => {
+                            const { checked: isChecked } = event.target;
+                            console.log('[App] Toggle select all log layers', { enabled: isChecked });
                             if (isChecked) {
-                              next.add(log.summary.log_id);
+                              setActiveLogs(() => new Set<string>(allLogIds));
                             } else {
-                              next.delete(log.summary.log_id);
-                            }
-                            return next;
-                          });
-                          if (isChecked) {
-                            setLastActivatedLog(log.summary.log_id);
-                            console.log('[App] Enabled log layer via list', log.summary.log_id);
-                          } else if (lastActivatedLog === log.summary.log_id) {
-                            setLastActivatedLog(undefined);
-                            console.log('[App] Disabled log layer via list', log.summary.log_id);
-                          }
-                          if (!isChecked) {
-                            if (hoveredLogId === log.summary.log_id) {
+                              setActiveLogs(() => new Set<string>());
+                              setLastActivatedLog(undefined);
                               setHoveredLogId(null);
-                            }
-                            if (previewState?.logId === log.summary.log_id) {
                               closePreview();
                             }
+                          }}
+                        />
+                        <div>
+                          <div>Select Loaded</div>
+                          <div className="log-metadata">Toggle all loaded log layers</div>
+                        </div>
+                      </label>
+                    )}
+                    {logOrder.map((logId) => {
+                      const log = logState.get(logId);
+                      if (!log) {
+                        return null;
+                      }
+                      const checked = activeLogs.has(log.summary.log_id);
+                      const sampleCount = log.detail?.num_points ?? log.summary.num_points;
+                      return (
+                        <label key={log.summary.log_id} className="log-item">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              const { checked: isChecked } = event.target;
+                              console.log('[App] Toggle log layer', {
+                                logId: log.summary.log_id,
+                                enabled: isChecked,
+                              });
+                              setActiveLogs((prev) => {
+                                const next = new Set(prev);
+                                if (isChecked) {
+                                  next.add(log.summary.log_id);
+                                } else {
+                                  next.delete(log.summary.log_id);
+                                }
+                                return next;
+                              });
+                              if (isChecked) {
+                                setLastActivatedLog(log.summary.log_id);
+                                console.log('[App] Enabled log layer via list', log.summary.log_id);
+                              } else if (lastActivatedLog === log.summary.log_id) {
+                                setLastActivatedLog(undefined);
+                                console.log('[App] Disabled log layer via list', log.summary.log_id);
+                              }
+                              if (!isChecked) {
+                                if (hoveredLogId === log.summary.log_id) {
+                                  setHoveredLogId(null);
+                                }
+                                if (previewState?.logId === log.summary.log_id) {
+                                  closePreview();
+                                }
+                              }
+                            }}
+                          />
+                          <div>
+                            <div>{log.summary.log_id}</div>
+                            {sampleCount !== undefined && (
+                              <div className="log-metadata">{sampleCount} samples</div>
+                            )}
+                            {log.loading && <div className="log-metadata">Loading trajectory…</div>}
+                            {log.error && <div className="error-banner">{log.error}</div>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {nextOffset !== null && (
+                      <button
+                        type="button"
+                        className="load-more-button"
+                        onClick={() => {
+                          if (nextOffset !== null && !isLoadingMore) {
+                            void loadLogs(nextOffset);
                           }
                         }}
-                      />
-                      <div>
-                        <div>{log.summary.log_id}</div>
-                        {sampleCount !== undefined && (
-                          <div className="log-metadata">{sampleCount} samples</div>
-                        )}
-                        {log.loading && <div className="log-metadata">Loading trajectory…</div>}
-                        {log.error && <div className="error-banner">{log.error}</div>}
-                      </div>
-                    </label>
-                  );
-                })}
-                {nextOffset !== null && (
-                  <button
-                    type="button"
-                    className="load-more-button"
-                    onClick={() => {
-                      if (nextOffset !== null && !isLoadingMore) {
-                        void loadLogs(nextOffset);
-                      }
-                    }}
-                    disabled={isLoadingMore}
-                  >
-                    {isLoadingMore
-                      ? 'Loading more…'
-                      : totalLogs !== null
-                        ? `Load more logs (${logOrder.length}/${totalLogs})`
-                        : 'Load more logs'}
-                  </button>
+                        disabled={isLoadingMore}
+                      >
+                        {isLoadingMore
+                          ? 'Loading more…'
+                          : totalLogs !== null
+                            ? `Load more logs (${logOrder.length}/${totalLogs})`
+                            : 'Load more logs'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      <div className={`preview-panel ${isPreviewOpen ? 'open' : ''}`}>
-        <div className="preview-header">
-          <div className="preview-title">
-            {previewState?.logId ? `Log ${previewState.logId}` : 'Log Preview'}
-          </div>
-          <button type="button" className="preview-close" onClick={closePreview}>
-            ×
-          </button>
-        </div>
-        <div className="preview-body">
-          {previewState?.loading && <p>Loading image…</p>}
-          {previewState?.error && !previewState.loading && (
-            <div className="error-banner">{previewState.error}</div>
-          )}
-          {previewState?.imageUrl && !previewState.loading && !previewState.error && (
-            <img
-              src={previewState.imageUrl}
-              alt={`Driving log ${previewState.logId}`}
-              className="preview-image"
-            />
-          )}
-          {previewDetail && (
-            <div className="preview-meta">
-              <div className="preview-meta-row">
-                <span>Samples</span>
-                <span>{previewDetail.num_points}</span>
+          <div className={`preview-panel ${isPreviewOpen ? 'open' : ''}`}>
+            <div className="preview-header">
+              <div className="preview-title">
+                {previewState?.logId ? `Log ${previewState.logId}` : 'Log Preview'}
               </div>
-              {previewDetail.bounds && (
-                <div className="preview-meta-row">
-                  <span>Bounds</span>
-                  <span>
-                    {previewDetail.bounds.min_lat.toFixed(4)}, {previewDetail.bounds.min_lon.toFixed(4)} →
-                    {' '}
-                    {previewDetail.bounds.max_lat.toFixed(4)}, {previewDetail.bounds.max_lon.toFixed(4)}
-                  </span>
+              <button type="button" className="preview-close" onClick={closePreview}>
+                ×
+              </button>
+            </div>
+            <div className="preview-body">
+              {previewState?.loading && <p>Loading image…</p>}
+              {previewState?.error && !previewState.loading && (
+                <div className="error-banner">{previewState.error}</div>
+              )}
+              {previewState?.imageUrl && !previewState.loading && !previewState.error && (
+                <img
+                  src={previewState.imageUrl}
+                  alt={`Driving log ${previewState.logId}`}
+                  className="preview-image"
+                />
+              )}
+              {previewDetail && (
+                <div className="preview-meta">
+                  <div className="preview-meta-row">
+                    <span>Samples</span>
+                    <span>{previewDetail.num_points}</span>
+                  </div>
+                  {previewDetail.bounds && (
+                    <div className="preview-meta-row">
+                      <span>Bounds</span>
+                      <span>
+                        {previewDetail.bounds.min_lat.toFixed(4)}, {previewDetail.bounds.min_lon.toFixed(4)} →
+                        {' '}
+                        {previewDetail.bounds.max_lat.toFixed(4)}, {previewDetail.bounds.max_lon.toFixed(4)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
+              {!previewState && <p>Click a trajectory to view its image</p>}
             </div>
-          )}
-          {!previewState && <p>Click a trajectory to view its image</p>}
+          </div>
         </div>
       </div>
-
-      <div className="status-bar">{statusMessage}</div>
     </div>
   );
 }
