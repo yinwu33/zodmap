@@ -299,6 +299,37 @@ html,
   height: 1rem;
 }
 
+.log-item-body,
+.log-item-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.log-item-body {
+  cursor: default;
+}
+
+.log-item-detail {
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.log-item-detail:focus-visible {
+  outline: 2px solid var(--google-blue);
+  outline-offset: 2px;
+}
+
+.log-item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .log-metadata {
   font-size: 0.75rem;
   color: rgba(32, 33, 36, 0.55);

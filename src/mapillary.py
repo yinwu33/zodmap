@@ -29,6 +29,8 @@ class MapillaryRetrievalData:
     thumb_1024_url: str
     lat: float
     lon: float
+    device: str
+    camera_type: Optional[str] = None
     image: Optional[np.ndarray] = None
 
     def to_metadata_dict(self) -> Dict[str, object]:
@@ -39,6 +41,8 @@ class MapillaryRetrievalData:
             "captured_at": self.captured_at,
             "thumb_original_url": self.thumb_original_url,
             "thumb_1024_url": self.thumb_1024_url,
+            "device": self.device,
+            "camera_type": self.camera_type,
             "lat": self.lat,
             "lon": self.lon,
         }
@@ -72,6 +76,8 @@ class MapillaryRetrievalData:
             thumb_1024_url=data.get("thumb_1024_url", ""),
             lat=img_lat,
             lon=img_lon,
+            device=data.get("make", "Unknown"),
+            camera_type=data.get("model"),
             image=img_array,
         )
 
@@ -171,7 +177,7 @@ class MapillaryHandler:
 
         # Query parameters
         params = {
-            "fields": "id,geometry,compass_angle,captured_at,thumb_1024_url,thumb_original_url",
+            "fields": "id,geometry,compass_angle,captured_at,thumb_1024_url,thumb_original_url,make,model",
             "bbox": bbox,
             "limit": limit,
             "access_token": self.access_token,

@@ -4,7 +4,7 @@ single_frames/*
 cache
 trainval-frames-mini.json
 *.jpg
-/output
+/output*
 __pycache__
 /logs
 frontend/node_modules

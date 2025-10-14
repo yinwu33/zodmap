@@ -28,6 +28,14 @@ interface PreviewState {
   error?: string;
 }
 
+interface PolylineLayer {
+  logId: string;
+  color: string;
+  points: LatLngExpression[];
+  detail?: DrivingLogDetail;
+  isTransient?: boolean;
+}
+
 const COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#14b8a6', '#8b5cf6'];
 const DEFAULT_CENTER: LatLngExpression = [59.3293, 18.0686];
 const DEFAULT_ZOOM = 14;
@@ -101,6 +109,47 @@ function App() {
   const allLogIds = logOrder;
   const isAllSelected = allLogIds.length > 0 && allLogIds.every((logId) => activeLogs.has(logId));
   const isIndeterminate = allLogIds.length > 0 && activeLogs.size > 0 && !isAllSelected;
+
+  const requestLogDetail = useCallback((logId: string) => {
+    setLogState((prev) => {
+      const entry = prev.get(logId);
+      if (!entry || entry.detail || entry.loading) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(logId, { ...entry, loading: true });
+      void fetchLogDetail(logId)
+        .then((detail) => {
+          console.log('[App] Loaded log detail', detail);
+          setLogState((current) => {
+            const updated = new Map(current);
+            const state = updated.get(logId);
+            if (!state) {
+              return current;
+            }
+            updated.set(logId, { ...state, detail, loading: false, error: undefined });
+            return updated;
+          });
+        })
+        .catch((err) => {
+          console.error('[App] Failed to load log detail', { logId, err });
+          setLogState((current) => {
+            const updated = new Map(current);
+            const state = updated.get(logId);
+            if (!state) {
+              return current;
+            }
+            updated.set(logId, {
+              ...state,
+              loading: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return updated;
+          });
+        });
+      return next;
+    });
+  }, []);
 
   const loadLogs = useCallback(async (offset: number) => {
     const isInitial = offset === 0;
@@ -194,47 +243,16 @@ function App() {
 
   useEffect(() => {
     activeLogs.forEach((logId) => {
-      setLogState((prev) => {
-        const next = new Map(prev);
-        const entry = next.get(logId);
-        if (!entry || entry.detail || entry.loading) {
-          return prev;
-        }
-
-        next.set(logId, { ...entry, loading: true });
-        void fetchLogDetail(logId)
-          .then((detail) => {
-            console.log('[App] Loaded log detail', detail);
-            setLogState((current) => {
-              const updated = new Map(current);
-              const state = updated.get(logId);
-              if (!state) {
-                return current;
-              }
-              updated.set(logId, { ...state, detail, loading: false, error: undefined });
-              return updated;
-            });
-          })
-          .catch((err) => {
-            console.error('[App] Failed to load log detail', { logId, err });
-            setLogState((current) => {
-              const updated = new Map(current);
-              const state = updated.get(logId);
-              if (!state) {
-                return current;
-              }
-              updated.set(logId, {
-                ...state,
-                loading: false,
-                error: err instanceof Error ? err.message : String(err),
-              });
-              return updated;
-            });
-          });
-        return next;
-      });
+      requestLogDetail(logId);
     });
-  }, [activeLogs]);
+  }, [activeLogs, requestLogDetail]);
+
+  useEffect(() => {
+    if (!lastActivatedLog) {
+      return;
+    }
+    requestLogDetail(lastActivatedLog);
+  }, [lastActivatedLog, requestLogDetail]);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -243,7 +261,7 @@ function App() {
   }, [isIndeterminate]);
 
   const polylineData = useMemo(() => {
-    const layers: { logId: string; color: string; points: LatLngExpression[]; detail?: DrivingLogDetail }[] = [];
+    const layers: PolylineLayer[] = [];
     let colorIndex = 0;
 
     activeLogs.forEach((logId) => {
@@ -259,8 +277,28 @@ function App() {
       }
     });
 
+    if (
+      lastActivatedLog &&
+      !activeLogs.has(lastActivatedLog) &&
+      previewState?.logId === lastActivatedLog
+    ) {
+      const entry = logState.get(lastActivatedLog);
+      const detail = entry?.detail;
+      const points = detail?.trajectory;
+      if (points && points.length > 0) {
+        const first = points[0];
+        layers.push({
+          logId: lastActivatedLog,
+          color: HIGHLIGHT_COLOR,
+          points: [[first.lat, first.lon]],
+          detail,
+          isTransient: true,
+        });
+      }
+    }
+
     return layers;
-  }, [activeLogs, logState]);
+  }, [activeLogs, lastActivatedLog, logState, previewState]);
 
   const openImageModal = useCallback((url: string) => {
     setModalImageUrl(url);
@@ -290,7 +328,7 @@ function App() {
     };
   }, [isImageModalOpen, closeImageModal]);
 
-  const handlePolylineClick = useCallback((logId: string) => {
+  const openLogPreview = useCallback((logId: string) => {
     console.log('[App] Requesting trajectory preview', logId);
     setLastActivatedLog(logId);
     setIsPreviewOpen(true);
@@ -337,6 +375,20 @@ function App() {
     setIsPreviewOpen(false);
     setPreviewState(null);
   }, [closeImageModal]);
+
+  const handleLogEntryClick = useCallback((logId: string) => {
+    if (
+      previewState?.logId === logId &&
+      previewState.imageUrl &&
+      !previewState.loading &&
+      !previewState.error
+    ) {
+      setLastActivatedLog(logId);
+      setIsPreviewOpen(true);
+      return;
+    }
+    openLogPreview(logId);
+  }, [openLogPreview, previewState]);
 
   const previewDetail = previewState?.logId
     ? logState.get(previewState.logId)?.detail
@@ -430,7 +482,7 @@ function App() {
                       mouseout: () => {
                         setHoveredLogId((current) => (current === layer.logId ? null : current));
                       },
-                      click: () => handlePolylineClick(layer.logId),
+                      click: () => openLogPreview(layer.logId),
                     }}
                   >
                     {!showPolyline && layer.detail && isHovered && (
@@ -468,7 +520,7 @@ function App() {
                         mouseout: () => {
                           setHoveredLogId((current) => (current === layer.logId ? null : current));
                         },
-                        click: () => handlePolylineClick(layer.logId),
+                        click: () => openLogPreview(layer.logId),
                       }}
                     >
                       {layer.detail && isHovered && (
@@ -529,11 +581,12 @@ function App() {
                       <div className="log-empty">No logs available</div>
                     )}
                     {logOrder.length > 0 && (
-                      <label className="log-item">
+                      <div className="log-item">
                         <input
                           type="checkbox"
                           ref={selectAllRef}
                           checked={isAllSelected}
+                          aria-label="Toggle all loaded log layers"
                           disabled={isLoadingSummaries || logOrder.length === 0}
                           onChange={(event) => {
                             const { checked: isChecked } = event.target;
@@ -548,11 +601,11 @@ function App() {
                             }
                           }}
                         />
-                        <div>
-                          <div>Select Loaded</div>
+                        <div className="log-item-body">
+                          <div className="log-item-title">Select Loaded</div>
                           <div className="log-metadata">Toggle all loaded log layers</div>
                         </div>
-                      </label>
+                      </div>
                     )}
                     {logOrder.map((logId) => {
                       const log = logState.get(logId);
@@ -562,10 +615,11 @@ function App() {
                       const checked = activeLogs.has(log.summary.log_id);
                       const sampleCount = log.detail?.num_points ?? log.summary.num_points;
                       return (
-                        <label key={log.summary.log_id} className="log-item">
+                        <div key={log.summary.log_id} className="log-item">
                           <input
                             type="checkbox"
                             checked={checked}
+                            aria-label={`Toggle log ${log.summary.log_id} layer`}
                             onChange={(event) => {
                               const { checked: isChecked } = event.target;
                               console.log('[App] Toggle log layer', {
@@ -581,10 +635,7 @@ function App() {
                                 }
                                 return next;
                               });
-                              if (isChecked) {
-                                setLastActivatedLog(log.summary.log_id);
-                                console.log('[App] Enabled log layer via list', log.summary.log_id);
-                              } else if (lastActivatedLog === log.summary.log_id) {
+                              if (!isChecked && lastActivatedLog === log.summary.log_id) {
                                 setLastActivatedLog(undefined);
                                 console.log('[App] Disabled log layer via list', log.summary.log_id);
                               }
@@ -598,15 +649,19 @@ function App() {
                               }
                             }}
                           />
-                          <div>
-                            <div>{log.summary.log_id}</div>
+                          <button
+                            type="button"
+                            className="log-item-detail"
+                            onClick={() => handleLogEntryClick(log.summary.log_id)}
+                          >
+                            <div className="log-item-title">{log.summary.log_id}</div>
                             {sampleCount !== undefined && (
                               <div className="log-metadata">{sampleCount} samples</div>
                             )}
                             {log.loading && <div className="log-metadata">Loading trajectory…</div>}
                             {log.error && <div className="error-banner">{log.error}</div>}
-                          </div>
-                        </label>
+                          </button>
+                        </div>
                       );
                     })}
                     {nextOffset !== null && (
