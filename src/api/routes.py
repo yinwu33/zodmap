@@ -75,7 +75,7 @@ def _compute_bounds(trajectory: List[Tuple[float, float]]) -> BoundingBox:
 def _get_cached_trajectory(log_id: str) -> List[Tuple[float, float]]:
     logger.info("Loading trajectory for log %s", log_id)
     log = DrivingLog(log_id)
-    return [(float(lat), float(lon)) for lat, lon in log.get_traj()]
+    return [(float(lat), float(lon)) for lat, lon in log.get_lat_lon()]
 
 
 @lru_cache(maxsize=64)

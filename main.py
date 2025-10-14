@@ -52,7 +52,7 @@ def main(log_id: str) -> None:
     # retrieval images based on one driving log
     logger.info("Processing log %s", log_id)
     log = DrivingLog(log_id)
-    traj = log.get_traj()
+    traj = log.get_lat_lon()
     logger.debug("Trajectory sample (first 5 points): %s", traj[:5])
 
     # retrieve mapillary images along the trajectory
