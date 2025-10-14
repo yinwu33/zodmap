@@ -11,12 +11,13 @@ from pydantic import BaseModel
 from PIL import Image
 
 from ..zod import DrivingLog
+from ..constants import _DATA_ROOT
 
 
 logger = logging.getLogger(__name__)
 
 
-DATASET_DIR = Path("./data/mini/single_frames")  # TODO: not hardcoded
+_DATA_ROOT_FRAMES = Path(_DATA_ROOT) / "single_frames"
 
 
 class BoundingBox(BaseModel):
@@ -48,15 +49,11 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 
 
 def _list_available_logs() -> Iterable[str]:
-    if not DATASET_DIR.exists():
-        logger.warning("Dataset directory %s does not exist", DATASET_DIR)
+    if not _DATA_ROOT_FRAMES.exists():
+        logger.warning("Dataset directory %s does not exist", _DATA_ROOT_FRAMES)
         return []
 
-    return sorted(
-        entry.name
-        for entry in DATASET_DIR.iterdir()
-        if entry.is_dir()
-    )
+    return sorted(entry.name for entry in _DATA_ROOT_FRAMES.iterdir() if entry.is_dir())
 
 
 def _compute_bounds(trajectory: List[Tuple[float, float]]) -> BoundingBox:
@@ -160,6 +157,8 @@ def get_log_image(log_id: str) -> Response:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception("Failed to render preview image for %s", log_id)
-        raise HTTPException(status_code=500, detail="Failed to generate preview image") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to generate preview image"
+        ) from exc
 
     return Response(content=image_bytes, media_type="image/jpeg")

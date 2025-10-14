@@ -91,6 +91,10 @@ function App() {
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const previewImageUrlRef = useRef<string | null>(null);
   const previewRequestIdRef = useRef(0);
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const allLogIds = useMemo(() => Array.from(logState.keys()), [logState]);
+  const isAllSelected = allLogIds.length > 0 && allLogIds.every((logId) => activeLogs.has(logId));
+  const isIndeterminate = activeLogs.size > 0 && !isAllSelected;
 
   useEffect(() => {
     const loadSummaries = async () => {
@@ -187,6 +191,12 @@ function App() {
       });
     });
   }, [activeLogs]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
 
   const polylineData = useMemo(() => {
     const layers: { logId: string; color: string; points: LatLngExpression[]; detail?: DrivingLogDetail }[] = [];
@@ -385,46 +395,72 @@ function App() {
               <p>Loading logs…</p>
             ) : (
               <div className="log-list">
+                {logState.size > 0 && (
+                  <label className="log-item">
+                    <input
+                      type="checkbox"
+                      ref={selectAllRef}
+                      checked={isAllSelected}
+                      disabled={isLoadingSummaries || logState.size === 0}
+                      onChange={(event) => {
+                        const { checked: isChecked } = event.target;
+                        console.log('[App] Toggle select all log layers', { enabled: isChecked });
+                        if (isChecked) {
+                          setActiveLogs(() => new Set<string>(allLogIds));
+                        } else {
+                          setActiveLogs(() => new Set<string>());
+                          setLastActivatedLog(undefined);
+                          setHoveredLogId(null);
+                          closePreview();
+                        }
+                      }}
+                    />
+                    <div>
+                      <div>Select All</div>
+                      <div className="log-metadata">Toggle all log layers</div>
+                    </div>
+                  </label>
+                )}
                 {Array.from(logState.values()).map((log) => {
                   const checked = activeLogs.has(log.summary.log_id);
                   const sampleCount = log.detail?.num_points ?? log.summary.num_points;
                   return (
-                  <label key={log.summary.log_id} className="log-item">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        const { checked: isChecked } = event.target;
-                        console.log('[App] Toggle log layer', {
-                          logId: log.summary.log_id,
-                          enabled: isChecked,
-                        });
-                        setActiveLogs((prev) => {
-                          const next = new Set(prev);
+                    <label key={log.summary.log_id} className="log-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const { checked: isChecked } = event.target;
+                          console.log('[App] Toggle log layer', {
+                            logId: log.summary.log_id,
+                            enabled: isChecked,
+                          });
+                          setActiveLogs((prev) => {
+                            const next = new Set(prev);
+                            if (isChecked) {
+                              next.add(log.summary.log_id);
+                            } else {
+                              next.delete(log.summary.log_id);
+                            }
+                            return next;
+                          });
                           if (isChecked) {
-                            next.add(log.summary.log_id);
-                          } else {
-                            next.delete(log.summary.log_id);
+                            setLastActivatedLog(log.summary.log_id);
+                            console.log('[App] Enabled log layer via list', log.summary.log_id);
+                          } else if (lastActivatedLog === log.summary.log_id) {
+                            setLastActivatedLog(undefined);
+                            console.log('[App] Disabled log layer via list', log.summary.log_id);
                           }
-                          return next;
-                        });
-                        if (isChecked) {
-                          setLastActivatedLog(log.summary.log_id);
-                          console.log('[App] Enabled log layer via list', log.summary.log_id);
-                        } else if (lastActivatedLog === log.summary.log_id) {
-                          setLastActivatedLog(undefined);
-                          console.log('[App] Disabled log layer via list', log.summary.log_id);
-                        }
-                        if (!isChecked) {
-                          if (hoveredLogId === log.summary.log_id) {
-                            setHoveredLogId(null);
+                          if (!isChecked) {
+                            if (hoveredLogId === log.summary.log_id) {
+                              setHoveredLogId(null);
+                            }
+                            if (previewState?.logId === log.summary.log_id) {
+                              closePreview();
+                            }
                           }
-                          if (previewState?.logId === log.summary.log_id) {
-                            closePreview();
-                          }
-                        }
-                      }}
-                    />
+                        }}
+                      />
                       <div>
                         <div>{log.summary.log_id}</div>
                         {sampleCount !== undefined && (
