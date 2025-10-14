@@ -93,6 +93,8 @@ function App() {
   const [hoveredLogId, setHoveredLogId] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
+  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
   const previewImageUrlRef = useRef<string | null>(null);
   const previewRequestIdRef = useRef(0);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -260,6 +262,34 @@ function App() {
     return layers;
   }, [activeLogs, logState]);
 
+  const openImageModal = useCallback((url: string) => {
+    setModalImageUrl(url);
+    setIsImageModalOpen(true);
+  }, []);
+
+  const closeImageModal = useCallback(() => {
+    setIsImageModalOpen(false);
+    setModalImageUrl(null);
+  }, []);
+
+  useEffect(() => {
+    if (!isImageModalOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeImageModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isImageModalOpen, closeImageModal]);
+
   const handlePolylineClick = useCallback((logId: string) => {
     console.log('[App] Requesting trajectory preview', logId);
     setLastActivatedLog(logId);
@@ -303,9 +333,10 @@ function App() {
       URL.revokeObjectURL(previewImageUrlRef.current);
       previewImageUrlRef.current = null;
     }
+    closeImageModal();
     setIsPreviewOpen(false);
     setPreviewState(null);
-  }, []);
+  }, [closeImageModal]);
 
   const previewDetail = previewState?.logId
     ? logState.get(previewState.logId)?.detail
@@ -617,11 +648,18 @@ function App() {
                 <div className="error-banner">{previewState.error}</div>
               )}
               {previewState?.imageUrl && !previewState.loading && !previewState.error && (
-                <img
-                  src={previewState.imageUrl}
-                  alt={`Driving log ${previewState.logId}`}
-                  className="preview-image"
-                />
+                <button
+                  type="button"
+                  className="preview-image-button"
+                  onClick={() => openImageModal(previewState.imageUrl!)}
+                  aria-label={previewState?.logId ? `Enlarge log ${previewState.logId}` : 'Enlarge log image'}
+                >
+                  <img
+                    src={previewState.imageUrl}
+                    alt={`Driving log ${previewState.logId}`}
+                    className="preview-image"
+                  />
+                </button>
               )}
               {previewDetail && (
                 <div className="preview-meta">
@@ -646,6 +684,29 @@ function App() {
           </div>
         </div>
       </div>
+      {isImageModalOpen && modalImageUrl && (
+        <div
+          className="image-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewState?.logId ? `Enlarged view of log ${previewState.logId}` : 'Enlarged driving log image'}
+          onClick={closeImageModal}
+        >
+          <div
+            className="image-modal-content"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="image-modal-close" onClick={closeImageModal}>
+              ×
+            </button>
+            <img
+              src={modalImageUrl}
+              alt={previewState?.logId ? `Driving log ${previewState.logId}` : 'Driving log image'}
+              className="image-modal-image"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

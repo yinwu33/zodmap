@@ -54,7 +54,7 @@ class DrivingLogListResponse(BaseModel):
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
-
+@lru_cache(maxsize=1)
 def _list_available_logs() -> Iterable[str]:
     if not _DATA_ROOT_FRAMES.exists():
         logger.warning("Dataset directory %s does not exist", _DATA_ROOT_FRAMES)
